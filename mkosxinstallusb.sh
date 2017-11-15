@@ -1,28 +1,27 @@
 #!/bin/sh
 
-set -e
+set +o errexit
 
 stick_dev=$1
-installer_dmg=${2:-InstallESD.dmg}
+installer_path=${2:-$PWD}
 InstallESD_mount_point=/mnt/OSX_InstallESD
 BaseSystem_mount_point=/mnt/OSX_BaseSystem
 target_drive_mount_point=/mnt/OSX_installer_drive
 
 cleanup () {
     set +e
-    echo "\n# cleaning up"
-    umount $target_drive_mount_point
-    umount $BaseSystem_mount_point
-    umount $InstallESD_mount_point
+    for path in $target_drive_mount_point $BaseSystem_mount_point $InstallESD_mount_point; do
+        [ -d "$path" ] && umount "$path"
+    done
     sync
-    kpartx -d BaseSystem.img
-    kpartx -d InstallESD.img
+    for img in BaseSystem.img InstallESD.img; do
+        [ -f "$img" ] && kpartx -d "$img"
+    done
     sync
-    rmdir $target_drive_mount_point
-    rmdir $BaseSystem_mount_point
-    rmdir $InstallESD_mount_point
-    rm -f InstallESD.img
-    rm -f BaseSystem.img
+    for path in $target_drive_mount_point $BaseSystem_mount_point $InstallESD_mount_point; do
+        [ -d "$path" ] && rmdir "$path"
+    done
+    rm -f InstallESD.img BaseSystem.img
 }
 
 trap cleanup EXIT
@@ -34,9 +33,22 @@ then
     exit 1
 fi
 
-if [ ! -r "$installer_dmg" ]
+if [ -f "$installer_path" ]
 then
-    echo "Cannot find OS X installer image $installer_dmg"
+    installer_dmg=$installer_path
+else
+    # assume .app package   
+    installer_dmg="$installer_path/Contents/SharedSupport/InstallESD.dmg"
+    if [ ! -f "$installer_dmg" ]
+    then
+        # last resort
+        installer_dmg="$installer_path/InstallESD.dmg"
+    fi
+fi
+
+if [ ! -f "$installer_dmg" ]
+then
+    echo "Cannot find OS X installer disk image InstallESD.dmg"
     exit 1
 fi
 
@@ -46,8 +58,7 @@ then
     exit 1
 fi
 
-for cmd in lsblk dmg2img kpartx sgdisk partprobe mkfs.hfsplus rsync
-do
+for cmd in lsblk dmg2img kpartx sgdisk partprobe mkfs.hfsplus rsync; do
     if [ ! $(which $cmd) ]
     then
         echo "\nCommand '$cmd' is not found. Please install required system packages:"
@@ -135,4 +146,5 @@ $rsync -P $InstallESD_mount_point/BaseSystem.chunklist $target_drive_mount_point
 $rsync -P $InstallESD_mount_point/BaseSystem.dmg $target_drive_mount_point/
 sync
 
-
+echo "\n# cleaning up"
+exit 0
