@@ -8,6 +8,25 @@ InstallESD_mount_point=/mnt/OSX_InstallESD
 BaseSystem_mount_point=/mnt/OSX_BaseSystem
 target_drive_mount_point=/mnt/OSX_installer_drive
 
+cleanup () {
+    set +e
+    echo "\n# cleaning up"
+    umount $target_drive_mount_point
+    umount $BaseSystem_mount_point
+    umount $InstallESD_mount_point
+    sync
+    kpartx -d BaseSystem.img
+    kpartx -d InstallESD.img
+    sync
+    rmdir $target_drive_mount_point
+    rmdir $BaseSystem_mount_point
+    rmdir $InstallESD_mount_point
+    rm -f InstallESD.img
+    rm -f BaseSystem.img
+}
+
+trap cleanup EXIT
+
 if [ -z "$stick_dev" ]
 then
     echo 'Usage: $0 <target_usb_drive> [InstallESD.dmg]'
@@ -104,7 +123,8 @@ mkdir -p $BaseSystem_mount_point
 mount /dev/mapper/loop1p1 $BaseSystem_mount_point
 mkdir -p $target_drive_mount_point
 mount "$stick_dev"2 $target_drive_mount_point
-$rsync --info=progress2 $BaseSystem_mount_point/ $target_drive_mount_point/
+# can return 24 on Korean filenames, so suppress errors
+$rsync --info=progress2 $BaseSystem_mount_point/ $target_drive_mount_point/ || true
 sync
 
 echo "\n# copying 5G of additional files to the USB drive, please wait"
@@ -115,16 +135,4 @@ $rsync -P $InstallESD_mount_point/BaseSystem.chunklist $target_drive_mount_point
 $rsync -P $InstallESD_mount_point/BaseSystem.dmg $target_drive_mount_point/
 sync
 
-echo "\n# cleaning up"
-umount $target_drive_mount_point
-umount $BaseSystem_mount_point
-umount $InstallESD_mount_point
-sync
-kpartx -d BaseSystem.img
-kpartx -d InstallESD.img
-sync
-rmdir $target_drive_mount_point
-rmdir $BaseSystem_mount_point
-rmdir $InstallESD_mount_point
-rm -f InstallESD.img
-rm -f BaseSystem.img
+
