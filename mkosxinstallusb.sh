@@ -109,36 +109,33 @@ echo "\n# converting installer disk image to raw format"
 dmg2img "$installer_dmg" InstallESD.img
 kpartx -s -a InstallESD.img
 
-echo "\n# converting the inner base system image to raw format"
+echo "\n# converting base system disk image to raw format"
 mkdir -p $InstallESD_mount_point
 mount /dev/mapper/loop0p2 $InstallESD_mount_point
 dmg2img $InstallESD_mount_point/BaseSystem.dmg BaseSystem.img
 kpartx -s -a BaseSystem.img
 
-echo "\n# partitioning USB drive for EFI boot"
+echo "\n# partitioning USB drive"
 umount $stick_dev? || true
 sgdisk -o $stick_dev
 partprobe $stick_dev
-sgdisk -n 1:0:+200M -t 1:EF00 -c 1:"EFI System Partition" -A 1:set:2 -n 2:0:0 -t 2:AF00 -c 2:"disk image" -A 2:set:2 $stick_dev
+sgdisk -n 1:0:0 -t 1:AF00 -c 1:"disk image" -A 1:set:2 $stick_dev
 partprobe $stick_dev
 sync
-mkfs.hfsplus -v "OS X Base System" "$stick_dev"2
-
-echo "\n# copying EFI partition"
-dd if=/dev/mapper/loop0p1 of="$stick_dev"1 bs=1M oflag=direct status=progress conv=fdatasync
+mkfs.hfsplus -v "OS X Base System" "$stick_dev"1
 
 rsync="rsync -aAEHW"
 
-echo "\n# copying 1.2G of installer files to the USB drive, please wait for a long sync"
+echo "\n# copying ~1.2G of installer files to the USB drive, please wait for a long sync"
 mkdir -p $BaseSystem_mount_point
 mount /dev/mapper/loop1p1 $BaseSystem_mount_point
 mkdir -p $target_drive_mount_point
-mount "$stick_dev"2 $target_drive_mount_point
+mount "$stick_dev"1 $target_drive_mount_point
 # can return 24 on Korean filenames, so suppress errors
 $rsync --info=progress2 $BaseSystem_mount_point/ $target_drive_mount_point/ || true
 sync
 
-echo "\n# copying 5G of additional files to the USB drive, please wait"
+echo "\n# copying ~5G of additional files to the USB drive, please wait"
 mount -o remount,sync $target_drive_mount_point
 rm $target_drive_mount_point/System/Installation/Packages
 $rsync -P $InstallESD_mount_point/Packages $target_drive_mount_point/System/Installation/
