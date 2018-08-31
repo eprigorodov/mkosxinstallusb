@@ -14,7 +14,7 @@ cleanup () {
         [ -d "$path" ] && umount "$path"
     done
     sync
-    for img in BaseSystem.img InstallESD.img; do
+    for img in BaseSystem.img InstallESD.img "$stick_dev"; do
         [ -f "$img" ] && kpartx -d "$img"
     done
     sync
@@ -22,6 +22,11 @@ cleanup () {
         [ -d "$path" ] && rmdir "$path"
     done
     rm -f InstallESD.img BaseSystem.img
+}
+
+map_partitions () {
+  set +e
+  kpartx -sav "$1" | sed -r 's/^add\s+map\s+(\S+)p[0-9]+\s.*$/\/dev\/mapper\/\1/;t;d' | head -n1
 }
 
 trap cleanup EXIT
@@ -107,30 +112,30 @@ fi
 
 echo "\n# converting installer disk image to raw format"
 dmg2img "$installer_dmg" InstallESD.img
-kpartx -s -a InstallESD.img
+InstallESD_partitions="$(map_partitions "InstallESD.img")"
 
 echo "\n# converting base system disk image to raw format"
 mkdir -p $InstallESD_mount_point
-mount /dev/mapper/loop0p2 $InstallESD_mount_point
+mount "${InstallESD_partitions}p2" $InstallESD_mount_point
 dmg2img $InstallESD_mount_point/BaseSystem.dmg BaseSystem.img
-kpartx -s -a BaseSystem.img
+BaseSystem_partitions="$(map_partitions "BaseSystem.img")"
 
 echo "\n# partitioning USB drive"
-umount $stick_dev? || true
+ls -1 "${stick_dev}"? | xargs -n1 umount || true
 sgdisk -o $stick_dev
 partprobe $stick_dev
 sgdisk -n 1:0:0 -t 1:AF00 -c 1:"disk image" -A 1:set:2 $stick_dev
-partprobe $stick_dev
 sync
-mkfs.hfsplus -v "OS X Base System" "$stick_dev"1
+stick_partitions="$(map_partitions "$stick_dev")"
+mkfs.hfsplus -v "OS X Base System" "${stick_partitions}p1"
 
 rsync="rsync -aAEHW"
 
 echo "\n# copying ~1.2G of installer files to the USB drive, please wait for a long sync"
 mkdir -p $BaseSystem_mount_point
-mount /dev/mapper/loop1p1 $BaseSystem_mount_point
+mount "${BaseSystem_partitions}p1" $BaseSystem_mount_point
 mkdir -p $target_drive_mount_point
-mount "$stick_dev"1 $target_drive_mount_point
+mount "${stick_partitions}p1" $target_drive_mount_point
 # can return 24 on Korean filenames, so suppress errors
 $rsync --info=progress2 $BaseSystem_mount_point/ $target_drive_mount_point/ || true
 sync
