@@ -122,7 +122,6 @@ BaseSystem_partitions="$(map_partitions "BaseSystem.img")"
 echo "\n# partitioning USB drive"
 ls -1 "${stick_dev}"? | xargs -n1 umount || true
 sgdisk -o $stick_dev
-partprobe $stick_dev
 sgdisk -n 1:0:0 -t 1:AF00 -c 1:"disk image" -A 1:set:2 $stick_dev
 sync
 stick_partitions="$(map_partitions "$stick_dev")"
