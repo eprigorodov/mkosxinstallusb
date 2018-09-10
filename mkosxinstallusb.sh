@@ -125,6 +125,13 @@ sgdisk -o $stick_dev
 sgdisk -n 1:0:0 -t 1:AF00 -c 1:"disk image" -A 1:set:2 $stick_dev
 sync
 stick_partitions="$(map_partitions "$stick_dev")"
+echo "\nAll information on the target partition ${stick_partitions}p1 is going to be ERASED\n"
+REPLY="no"
+read -p "Are you sure that you want to continue [yes/no]? " REPLY
+if [ "$REPLY" != "yes" ]
+then
+    exit 0
+fi
 mkfs.hfsplus -v "OS X Base System" "${stick_partitions}p1"
 
 rsync="rsync -aAEHW"
