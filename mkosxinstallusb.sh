@@ -25,7 +25,6 @@ cleanup () {
 }
 
 map_partitions () {
-  set +e
   kpartx -sav "$1" | sed -r 's/^add\s+map\s+(\S+)p[0-9]+\s.*$/\/dev\/mapper\/\1/;t;d' | head -n1
 }
 
