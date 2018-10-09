@@ -25,7 +25,31 @@ cleanup () {
 }
 
 map_partitions () {
-  kpartx -sav "$1" | sed -r 's/^add\s+map\s+(\S+)p[0-9]+\s.*$/\/dev\/mapper\/\1/;t;d' | head -n1
+    device="$1"
+    if [ -f "$device" ]
+    then
+        partitions=$(kpartx -asv "$device" | sed -r 's/^add\s+map\s+(\w+).*$/\/dev\/mapper\/\1/')
+    else
+        partitions=$(lsblk -lnp -o NAME "$device" | grep -v "^$device$")
+    fi
+    part_count=$(count_args() { echo $#; }; count_args $partitions)
+    if [ "$part_count" = "1" ]
+    then
+        # shortcut for the target device 
+        # which has just been re-partitioned by sgdisk
+        # and knowingly contains only one partition
+        echo "$partitions"
+    else
+        for part in $partitions 
+        do
+            fstype=$(lsblk -ln -o FSTYPE "$part")
+            if [ "$fstype" = "hfsplus" ]
+            then
+                echo "$part"
+                break
+            fi
+        done
+    fi
 }
 
 trap cleanup EXIT
@@ -111,36 +135,36 @@ fi
 
 echo "\n# converting installer disk image to raw format"
 dmg2img "$installer_dmg" InstallESD.img
-InstallESD_partitions="$(map_partitions "InstallESD.img")"
+InstallESD_partition="$(map_partitions "InstallESD.img")"
 
 echo "\n# converting base system disk image to raw format"
 mkdir -p $InstallESD_mount_point
-mount "${InstallESD_partitions}p2" $InstallESD_mount_point
+mount "${InstallESD_partition}" $InstallESD_mount_point
 dmg2img $InstallESD_mount_point/BaseSystem.dmg BaseSystem.img
-BaseSystem_partitions="$(map_partitions "BaseSystem.img")"
+BaseSystem_partition="$(map_partitions "BaseSystem.img")"
 
 echo "\n# partitioning USB drive"
 ls -1 "${stick_dev}"? | xargs -n1 umount || true
 sgdisk -o $stick_dev
 sgdisk -n 1:0:0 -t 1:AF00 -c 1:"disk image" -A 1:set:2 $stick_dev
 sync
-stick_partitions="$(map_partitions "$stick_dev")"
-echo "\nAll information on the target partition ${stick_partitions}p1 is going to be ERASED\n"
+stick_partition="$(map_partitions "$stick_dev")"
+echo "\nAll information on the target partition ${stick_partition} is going to be ERASED\n"
 REPLY="no"
 read -p "Are you sure that you want to continue [yes/no]? " REPLY
 if [ "$REPLY" != "yes" ]
 then
     exit 0
 fi
-mkfs.hfsplus -v "OS X Base System" "${stick_partitions}p1"
+mkfs.hfsplus -v "OS X Base System" "${stick_partition}"
 
 rsync="rsync -aAEHW"
 
 echo "\n# copying ~1.2G of installer files to the USB drive, please wait for a long sync"
 mkdir -p $BaseSystem_mount_point
-mount "${BaseSystem_partitions}p1" $BaseSystem_mount_point
+mount "${BaseSystem_partition}" $BaseSystem_mount_point
 mkdir -p $target_drive_mount_point
-mount "${stick_partitions}p1" $target_drive_mount_point
+mount "${stick_partition}" $target_drive_mount_point
 # can return 24 on Korean filenames, so suppress errors
 $rsync --info=progress2 $BaseSystem_mount_point/ $target_drive_mount_point/ || true
 sync
