@@ -147,7 +147,13 @@ dmg2img $InstallESD_mount_point/BaseSystem.dmg BaseSystem.img
 BaseSystem_partition="$(map_partitions "BaseSystem.img")"
 
 echo "\n# partitioning USB drive"
-ls -1 "${stick_dev}"? | xargs -n1 umount || true
+if [ -b "$stick_dev" ]
+then
+    for device in $(lsblk -lnp -o NAME "$stick_dev" | tac)
+    do
+        umount -l "$device" 2>/dev/null || true
+    done
+fi
 sgdisk -o $stick_dev
 sgdisk -n 1:0:0 -t 1:AF00 -c 1:"disk image" -A 1:set:2 $stick_dev
 sync
