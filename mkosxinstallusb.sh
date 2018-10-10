@@ -95,13 +95,16 @@ for cmd in lsblk dmg2img kpartx sgdisk partprobe mkfs.hfsplus rsync; do
     fi
 done
 
-mounted_at_root=$(lsblk $stick_dev | grep "part /$") || true
+if [ -b "$stick_dev" ]
+then 
+    mounted_at_root=$(lsblk $stick_dev | grep "part /$") || true
 
-if [ ! -z "$mounted_at_root" ]
-then
-    lsblk $stick_dev
-    echo "Target drive appears to contain partition mounted as root filesystem, aborting"
-    exit 1
+    if [ ! -z "$mounted_at_root" ]
+    then
+        lsblk $stick_dev
+        echo "Target drive appears to contain partition mounted as root filesystem, aborting"
+        exit 1
+    fi
 fi
 
 echo "\nAll information on the target drive $stick_dev is going to be ERASED\n"
